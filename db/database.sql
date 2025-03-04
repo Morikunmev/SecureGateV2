@@ -1,5 +1,14 @@
 ALTER TABLE usuarios ADD COLUMN status ENUM('pending', 'active') NOT NULL DEFAULT 'pending';
 
+CREATE TABLE usuarios (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(100),
+    password VARCHAR(255),
+    codigo_qr VARCHAR(255),
+    created_at TIMESTAMP,
+    status ENUM('active', 'inactive') DEFAULT 'active'
+);
+
 CREATE TABLE IF NOT EXISTS verificaciones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,
