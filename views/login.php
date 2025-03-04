@@ -41,52 +41,91 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_email'])) {
     $password = $_POST['password'] ?? '';
     $qrToken = $_POST['qr_token'] ?? null;  // Capturar el token QR si existe
 
-    $result = $authController->loginWithEmail($email, $password, $qrToken);
-    if ($result['success']) {
-        // Si el login fue exitoso, loguear antes de redirigir
-        error_log("Éxito en login con QR, redirigiendo a dashboard");
+    // Primero, obtener la información del usuario sin intentar login
+    $user = $authController->getUserByEmail($email);
 
-        // Comprobar que las variables de sesión están establecidas
-        error_log("Variables de sesión antes de redirigir - usuario_id: " .
-            ($_SESSION['usuario_id'] ?? 'no establecido'));
-
-        // Verificar la URL a la que se redirige
-        $dashboardUrl = BASE_URL . '/views/dashboard.php';
-        error_log("Redirigiendo a: " . $dashboardUrl);
-
-        // Redirigir
-        redirect($dashboardUrl);
-        exit;
+    // Validar estado del usuario antes de intentar login
+    if (!$user) {
+        error_log("Intento de login con email no registrado: " . $email);
+        $message = 'Email no registrado.';
     } else {
-        error_log("Error en login con QR: " . $result['message']);
-        $message = $result['message'];
+        // Validar estado de la cuenta antes del login
+        switch ($user['status']) {
+            case 'active':
+                // Proceder con el login normal
+                $result = $authController->loginWithEmail($email, $password, $qrToken);
+                if ($result['success']) {
+                    error_log("Login exitoso para usuario: " . $email);
+
+                    // Registro de log detallado
+                    error_log("Variables de sesión - usuario_id: " .
+                        ($_SESSION['usuario_id'] ?? 'no establecido'));
+
+                    // Redirigir al dashboard
+                    $dashboardUrl = BASE_URL . '/views/dashboard.php';
+                    error_log("Redirigiendo a: " . $dashboardUrl);
+                    redirect($dashboardUrl);
+                    exit;
+                } else {
+                    error_log("Error en login con email: " . $result['message']);
+                    $message = $result['message'];
+                }
+                break;
+
+            case 'pending':
+                error_log("Intento de login con cuenta pendiente: " . $email);
+                $message = 'Tu cuenta está pendiente de activación. Por favor, verifica tu correo electrónico.';
+                break;
+
+            case 'suspended':
+                error_log("Intento de login con cuenta suspendida: " . $email);
+                $message = 'Tu cuenta ha sido suspendida. Contacta al soporte técnico.';
+                break;
+
+            case 'banned':
+                error_log("Intento de login con cuenta bloqueada: " . $email);
+                $message = 'Tu cuenta ha sido bloqueada permanentemente.';
+                break;
+
+            default:
+                error_log("Intento de login con estado de cuenta desconocido: " . $user['status']);
+                $message = 'No se puede iniciar sesión. Estado de cuenta no válido.';
+                break;
+        }
     }
 }
 
 // Procesar formulario de login con código QR
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_POST['login_qr'])) {
     $codigo_qr = $_POST['codigo_qr'] ?? '';
+
+    // Depuración - guardar en log para ver qué valor se está recibiendo
+    error_log("Intentando login con QR: " . $codigo_qr);
 
     $result = $authController->loginWithQr($codigo_qr);
 
     if ($result['success']) {
-        // Si el login fue exitoso, loguear antes de redirigir
+        // Si el login fue exitoso, guardar en el log antes de redirigir
         error_log("Éxito en login con QR, redirigiendo a dashboard");
+        error_log("Variables de sesión - usuario_id: " . ($_SESSION['usuario_id'] ?? 'no establecido'));
 
-        // Comprobar que las variables de sesión están establecidas
-        error_log("Variables de sesión antes de redirigir - usuario_id: " .
-            ($_SESSION['usuario_id'] ?? 'no establecido'));
+        // Asegurarse de que se esté estableciendo correctamente la sesión
+        if (!isset($_SESSION['usuario_id'])) {
+            $_SESSION['usuario_id'] = $result['user_id']; // Asegúrate de que AuthController devuelva user_id
+            error_log("Estableciendo usuario_id manualmente: " . $result['user_id']);
+        }
 
         // Verificar la URL a la que se redirige
         $dashboardUrl = BASE_URL . '/views/dashboard.php';
         error_log("Redirigiendo a: " . $dashboardUrl);
 
-        // Redirigir
-        redirect($dashboardUrl);
+        // Redirigir y asegurarse de que el script termine
+        header("Location: " . $dashboardUrl);
         exit;
     } else {
         error_log("Error en login con QR: " . $result['message']);
         $message = $result['message'];
+        $messageType = 'error';
     }
 }
 ?>
@@ -304,16 +343,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
             </div>
         </div>
     </div>
-
     <!-- Cargar librería QR -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-
     <!-- Funcionalidad para pestañas y escáner QR -->
     <script>
+        // Espera a que el DOM se cargue completamente
         document.addEventListener('DOMContentLoaded', function() {
             const tabItems = document.querySelectorAll('.tab-item');
             const tabPanes = document.querySelectorAll('.tab-pane');
-
             // Función para iniciar el escáner QR
             function initQrScanner() {
                 const qrReaderDiv = document.getElementById('qr-reader');
@@ -326,28 +363,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                     return;
                 }
 
+                //Verifica si la libreria html5qrcode se ha cargado correctamente
                 if (typeof Html5Qrcode === 'undefined') {
                     qrResultDiv.innerHTML = '<p style="color: red;">Error: Librería de escaneo QR no disponible.</p>';
                     return;
                 }
-
+                //se configura los parametros para el escaner QR
                 const html5QrCode = new Html5Qrcode("qr-reader");
                 const config = {
+                    //Establece 10 frames per second para el scaneo
                     fps: 10,
+                    //Define un cuadro de escaneo de 250x250 pixels
                     qrbox: {
                         width: 250,
                         height: 250
                     },
+                    //usa el detector de codigos de barra del navegador si esta disponible, para tambien mejorar la precision y rendimiento del escaneado
                     experimentalFeatures: {
                         useBarCodeDetectorIfSupported: true
                     }
                 };
 
-                // Iniciar la cámara y el escaneo
+                //En resumen, esta configuracion prepara el escaner QR con parametros especificos de rendimiento y precision
+                //------------------------------------------------
+                // Iniciar la cámara y el escaneo, el metodo start es para iniciar el escaneo de codigos QR
                 html5QrCode.start({
-                        facingMode: "environment"
+                        facingMode: "environment" //Usa la camara trasera del dispositivo
                     },
                     config,
+                    //Funcion callback cuando se detecta un codigo QR, solo se ejecuta cuando se detecta un codigo QR
                     // Función actualizada para manejar QR escaneado
                     (decodedText) => {
                         // Detener el escáner
@@ -361,7 +405,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                             if (decodedText.includes('code=')) {
                                 try {
                                     // Extraer el código QR del parámetro code en la URL
+                                    //Intenta crear un objeto URL a partir del texto escaneado
                                     const url = new URL(decodedText);
+                                    //Extrae el valor del parámetro 'code' de la URL
                                     const qrCode = url.searchParams.get('code');
 
                                     if (qrCode) {
@@ -380,7 +426,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                                 }
                             }
 
-                            // Si llega aquí, continuar con el manejo actual
+                            // Si llega aquí, continuar con el manejo actual -- no usado en este caso
                             try {
                                 // Intentar detectar si el texto comienza con { o [ (posible JSON)
                                 if (decodedText.trim().charAt(0) === '{' || decodedText.trim().charAt(0) === '[') {
@@ -524,6 +570,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
     <script>
         document.getElementById('qr-form').addEventListener('submit', function(e) {
             e.preventDefault();
+
+
+            console.log("Enviando QR al servidor:", qrCode);
+
+            // Mostrar un mensaje de espera
+            resultDiv.innerHTML += '<p>Procesando código QR, por favor espere...</p>';
+
+            // Enviar mediante POST directo
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = window.location.href;
+            form.style.display = 'none';
+
+            // Agregar campo código QR
+            const qrInput = document.createElement('input');
+            qrInput.type = 'hidden';
+            qrInput.name = 'codigo_qr';
+            qrInput.value = qrCode;
+            form.appendChild(qrInput);
+
+            // Agregar campo login_qr
+            const loginInput = document.createElement('input');
+            loginInput.type = 'hidden';
+            loginInput.name = 'login_qr';
+            loginInput.value = '1';
+            form.appendChild(loginInput);
+
+            // Agregar al documento y enviar
+            document.body.appendChild(form);
+            form.submit();
 
             const formData = new FormData(this);
             const qrCode = formData.get('codigo_qr');

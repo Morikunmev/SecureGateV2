@@ -9,6 +9,39 @@ class AuthController
         require_once __DIR__ . '/../models/User.php';
         $this->userModel = new User();
     }
+    /**
+     * Obtiene la información de un usuario por su email sin intentar login
+     * 
+     * @param string $email Email del usuario a buscar
+     * @return array|null Información del usuario o null si no existe
+     */
+    public function getUserByEmail($email)
+    {
+        // Validar entrada
+        if (empty($email)) {
+            error_log("Intento de buscar usuario con email vacío");
+            return null;
+        }
+
+        // Preparar consulta SQL para obtener información básica del usuario
+        $sql = "SELECT id, email, status FROM usuarios WHERE email = ?";
+
+        try {
+            // Usar método de consulta existente (ajustar según tu implementación)
+            $user = dbFetchOne($sql, "s", [$email]);
+
+            if (!$user) {
+                error_log("No se encontró usuario con email: " . $email);
+                return null;
+            }
+
+            return $user;
+        } catch (Exception $e) {
+            // Registrar cualquier error de base de datos
+            error_log("Error al buscar usuario por email: " . $e->getMessage());
+            return null;
+        }
+    }
 
     // Procesar login con email y contraseña
     // En AuthController.php
@@ -68,7 +101,6 @@ class AuthController
             'message' => 'Email o contraseña incorrectos.'
         ];
     }
-    // Procesar login con código QR
     // Procesar login con código QR - versión simplificada para depuración
     public function loginWithQr($codigo_qr)
     {
@@ -83,7 +115,7 @@ class AuthController
         // Registrar el intento
         error_log("Intento de login con QR: " . $codigo_qr);
 
-        // Buscar usuario por código QR - SIN verificar estado activo inicialmente
+        // Buscar usuario por código QR con manejo detallado de estados
         $sql = "SELECT * FROM usuarios WHERE codigo_qr = ?";
         $user = dbFetchOne($sql, "s", [$codigo_qr]);
 
@@ -95,22 +127,46 @@ class AuthController
             ];
         }
 
-        // Si existe el usuario pero está pendiente
-        if ($user['status'] !== 'active') {
-            error_log("Usuario encontrado pero estado: " . $user['status']);
-            return [
-                'success' => false,
-                'message' => 'Tu cuenta no está activa. Por favor verifica tu correo electrónico.'
-            ];
-        }
-        $_SESSION['usuario_id'] = $user['id'];
-        $_SESSION['usuario_email'] = $user['email'];
-        error_log("Login exitoso para usuario ID: " . $user['id']);
+        // Validación detallada de estados
+        switch ($user['status']) {
+            case 'active':
+                // Estado normal, proceder con login
+                $_SESSION['usuario_id'] = $user['id'];
+                $_SESSION['usuario_email'] = $user['email'];
+                error_log("Login exitoso para usuario ID: " . $user['id']);
+                return [
+                    'success' => true,
+                    'message' => 'Login exitoso'
+                ];
 
-        return [
-            'success' => true,
-            'message' => 'Login exitoso'
-        ];
+            case 'pending':
+                error_log("Intento de login con cuenta pendiente: " . $user['id']);
+                return [
+                    'success' => false,
+                    'message' => 'Tu cuenta está pendiente de activación. Verifica tu correo electrónico.'
+                ];
+
+            case 'suspended':
+                error_log("Intento de login con cuenta suspendida: " . $user['id']);
+                return [
+                    'success' => false,
+                    'message' => 'Tu cuenta ha sido suspendida. Contacta al soporte técnico.'
+                ];
+
+            case 'banned':
+                error_log("Intento de login con cuenta bloqueada: " . $user['id']);
+                return [
+                    'success' => false,
+                    'message' => 'Tu cuenta ha sido bloqueada. Contacta al administrador.'
+                ];
+
+            default:
+                error_log("Intento de login con estado desconocido: " . $user['status']);
+                return [
+                    'success' => false,
+                    'message' => 'Estado de cuenta no válido.'
+                ];
+        }
     }
     // Método de registro con verificación por email
     public function register($email, $password, $password_confirm)

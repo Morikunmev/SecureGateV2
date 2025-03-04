@@ -153,11 +153,13 @@ class User
     }
 
     // Obtener todos los usuarios
-    public function getAllUsers()
+    // Obtener todos los usuarios
+    public function getAllUsers(): array
     {
         return dbFetchAll("SELECT id, email, codigo_qr, status, created_at FROM usuarios ORDER BY created_at DESC");
     }
-    public function getVerificationDataByUserId($userId)
+
+    public function getVerificationDataByUserId($userId): array|bool
     {
         return dbFetchOne("SELECT * FROM verificaciones WHERE usuario_id = ?", "i", [$userId]);
     }
