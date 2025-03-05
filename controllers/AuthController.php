@@ -7,7 +7,7 @@ class AuthController
     public function __construct()
     {
         require_once __DIR__ . '/../models/User.php';
-        $this->userModel = new User();
+        $this->userModel = new User(); //Aca se instancia la clase User para tener acceso a los metodos publicos del mismo
     }
     /**
      * Obtiene la información de un usuario por su email sin intentar login
@@ -186,6 +186,7 @@ class AuthController
             ];
         }
 
+        //Si el email no tiene un formato valido devuelve ese mensjae
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return [
                 'success' => false,
@@ -193,6 +194,7 @@ class AuthController
             ];
         }
 
+        // se verifica que la contraseña tenga al menos 6 caracteres.
         if (strlen($password) < 6) {
             return [
                 'success' => false,

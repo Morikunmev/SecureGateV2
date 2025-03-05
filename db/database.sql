@@ -1,4 +1,4 @@
-ALTER TABLE usuarios ADD COLUMN status ENUM('pending', 'active') NOT NULL DEFAULT 'pending';
+
 
 CREATE TABLE usuarios (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -6,8 +6,9 @@ CREATE TABLE usuarios (
     password VARCHAR(255),
     codigo_qr VARCHAR(255),
     created_at TIMESTAMP,
-    status ENUM('active', 'inactive') DEFAULT 'active'
+    status ENUM('pending', 'active') NOT NULL DEFAULT 'pending'
 );
+
 
 CREATE TABLE IF NOT EXISTS verificaciones (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -19,3 +20,5 @@ CREATE TABLE IF NOT EXISTS verificaciones (
     INDEX (token),
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE usuarios ADD COLUMN status ENUM('pending', 'active') NOT NULL DEFAULT 'pending';
