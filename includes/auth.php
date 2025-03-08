@@ -188,7 +188,6 @@ function registerUser($email, $password, $passwordConfirm)
         'userId' => $userId
     ];
 }
-
 // Procesar escaneo de QR
 function processQrScan($userId, $qrCode)
 {

@@ -117,6 +117,15 @@ else if (isset($_GET['id']) && isset($_GET['code'])) {
             text-align: center;
             margin-top: 20px;
         }
+        
+        .info-box {
+            background-color: #e7f3fe;
+            border-left: 5px solid #2196F3;
+            padding: 15px;
+            margin: 15px 0;
+            color: #0c5460;
+            text-align: left;
+        }
     </style>
 </head>
 
@@ -129,7 +138,8 @@ else if (isset($_GET['id']) && isset($_GET['code'])) {
                 <?= $message ?>
             </div>
 
-            <?php if ($qrCode): ?>
+            <?php if (isset($_GET['id']) && isset($_GET['token']) && $qrCode): ?>
+                <!-- Este bloque solo se muestra cuando se viene desde un enlace de correo con token -->
                 <div class="qr-container">
                     <h2>Tu código QR está activado</h2>
                     <p>Este es tu código QR para iniciar sesión. Guárdalo en un lugar seguro.</p>
@@ -140,6 +150,16 @@ else if (isset($_GET['id']) && isset($_GET['code'])) {
 
                     <div class="action-buttons">
                         <a href="<?= BASE_URL ?>/pages/login.php" class="btn">Ir a Login</a>
+                    </div>
+                </div>
+            <?php elseif (isset($_GET['id']) && isset($_GET['code'])): ?>
+                <!-- Este bloque se muestra cuando se escanea un QR desde el móvil -->
+                <div class="success-container">
+                    <p>Se ha enviado un correo a tu dirección de email registrada.</p>
+                    <p>Por favor, revisa tu bandeja de entrada para completar el proceso de verificación.</p>
+                    
+                    <div class="info-box">
+                        <p><strong>¡Importante!</strong> Si no encuentras el correo en tu bandeja de entrada, revisa también la carpeta de spam o correo no deseado.</p>
                     </div>
                 </div>
             <?php else: ?>
