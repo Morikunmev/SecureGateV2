@@ -1,7 +1,19 @@
 <?php
 // config.php - Configuración simplificada
 
-// Configuración de sesión básica (sin opciones complejas)
+// Configuración de sesión mejorada
+ini_set('session.cookie_httponly', 1); // Prevenir acceso a cookies via JavaScript
+ini_set('session.use_only_cookies', 1); // Forzar uso de cookies solamente
+
+// Cookie segura en HTTPS
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+    ini_set('session.cookie_secure', 1);
+}
+
+// Aumentar el tiempo de vida de la sesión
+ini_set('session.gc_maxlifetime', 3600); // 1 hora
+
+// Iniciar sesión básica
 session_start();
 
 // Cargar variables de entorno

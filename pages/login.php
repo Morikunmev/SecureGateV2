@@ -89,8 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_email'])) {
 }
 
 // Procesar formulario de login con QR
-// Procesar formulario de login con QR
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_POST['login_qr'])) {
     $codigo_qr = $_POST['codigo_qr'] ?? ($_POST['codigo_qr_manual'] ?? '');
 
     error_log("Intentando login con QR: " . $codigo_qr);
@@ -99,62 +98,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
         $message = "Por favor ingresa o escanea un código QR";
         $messageType = "error";
     } else {
-        // Consulta directa a la base de datos
-        $conn = getDb();
-        $stmt = $conn->prepare("SELECT * FROM usuarios WHERE codigo_qr = ?");
-        $stmt->bind_param("s", $codigo_qr);
-        $stmt->execute();
-        $result = $stmt->get_result();
+        // Llamar a la función loginWithQr para manejar la autenticación
+        $result = loginWithQr($codigo_qr);
 
-        if ($result->num_rows === 0) {
-            error_log("No se encontró usuario con QR: " . $codigo_qr);
-            $message = "Código QR no válido o no registrado.";
-            $messageType = "error";
+        if ($result['success']) {
+            // Asegurarse de que la sesión está establecida
+            error_log("Login exitoso, sesión: " . print_r($_SESSION, true));
+
+            // Redirigir usando header() en lugar de JavaScript
+            header("Location: " . BASE_URL . "/pages/dashboard.php");
+            exit(); // Importante: asegura que no se ejecute más código después de la redirección
         } else {
-            $user = $result->fetch_assoc();
-
-            if ($user['status'] !== 'active') {
-                $message = "Tu cuenta no está activa. Por favor, verifica tu correo electrónico.";
-                $messageType = "error";
-                error_log("Usuario con estado no activo: " . $user['status']);
-            } else {
-                // Usuario encontrado y activo
-                error_log("Usuario encontrado y activo: ID=" . $user['id']);
-
-                // Establecer la sesión manualmente
-                $_SESSION['usuario_id'] = $user['id'];
-                $_SESSION['usuario_email'] = $user['email'];
-
-                error_log("Sesión establecida: " . print_r($_SESSION, true));
-
-                // Mostrar información de depuración
-                echo '<div style="background-color: #d4edda; color: #155724; padding: 15px; margin: 15px 0; border-radius: 4px; text-align: center;">
-                    <h3 style="margin-top:0;">Login exitoso</h3>
-                    <p><strong>Usuario ID:</strong> ' . $_SESSION['usuario_id'] . '</p>
-                    <p><strong>Email:</strong> ' . $_SESSION['usuario_email'] . '</p>
-                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; text-align: left;">
-                        <p><strong>Información de sesión:</strong></p>
-                        <pre>' . print_r($_SESSION, true) . '</pre>
-                    </div>
-                    <p style="margin-top: 15px;">Haz clic en el botón para ir al dashboard:</p>
-                    <a href="' . BASE_URL . '/pages/dashboard.php" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">IR AL DASHBOARD</a>
-                    <p style="margin-top: 15px; font-size: 12px; color: #666;">Si no eres redirigido automáticamente, haz clic en el botón anterior.</p>
-                </div>';
-
-                // Redirección directa al dashboard con JavaScript, después de un retraso
-                echo '<script>
-                    console.log("Preparando redirección al dashboard...");
-                    setTimeout(function() {
-                        console.log("Redirigiendo ahora a: ' . BASE_URL . '/pages/dashboard.php");
-                        window.location.href = "' . BASE_URL . '/pages/dashboard.php";
-                    }, 5000); // 5 segundos de retraso
-                </script>';
-                exit();
-            }
+            $message = $result['message'];
+            $messageType = "error";
+            error_log("Error de login: " . $message);
         }
     }
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -373,6 +333,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
     </div>
 
     <!-- Cargar librerías y scripts -->
+    <!-- Cargar librerías y scripts -->
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="<?= BASE_URL ?>/assets/js/qr-scanner.js"></script>
     <script>
@@ -387,16 +348,116 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
             const tabItems = document.querySelectorAll('.tab-item');
             const tabPanes = document.querySelectorAll('.tab-pane');
 
-            // Si hay un error en la consola, esto se mostrará
-            window.onerror = function(message, source, lineno, colno, error) {
-                console.error("%c ERROR JAVASCRIPT DETECTADO", "background: red; color: white; padding: 5px;");
-                console.error("Mensaje:", message);
-                console.error("Archivo:", source);
-                console.error("Línea:", lineno);
-                console.error("Error completo:", error);
-                return false;
-            };
+            // Función de inicialización de QR definida directamente
+            function initQrScannerLocal() {
+                console.log("Intentando iniciar escáner QR localmente");
 
+                // Verificar si la función global está disponible
+                if (typeof window.initQrScanner === 'function') {
+                    console.log("Usando función global initQrScanner");
+                    window.initQrScanner();
+                } else {
+                    console.log("Función global no disponible, iniciando escáner local");
+
+                    const qrReaderDiv = document.getElementById('qr-reader');
+                    const qrResultDiv = document.getElementById('qr-result');
+                    const qrCodeInput = document.getElementById('codigo_qr');
+
+                    // Verificar que los elementos existen
+                    if (!qrReaderDiv || !qrResultDiv || !qrCodeInput) {
+                        console.error("ERROR: Elementos no encontrados");
+                        return;
+                    }
+
+                    // Verificar que la biblioteca se ha cargado
+                    if (typeof Html5Qrcode === 'undefined') {
+                        console.error("ERROR: Librería QR no disponible");
+                        qrResultDiv.innerHTML = '<p style="color: red;">Error: Librería de escaneo QR no disponible.</p>';
+                        return;
+                    }
+
+                    // Configurar el escáner
+                    const html5QrCode = new Html5Qrcode("qr-reader");
+                    const config = {
+                        fps: 10,
+                        qrbox: {
+                            width: 250,
+                            height: 250
+                        },
+                    };
+
+                    // Iniciar la cámara y el escaneo
+                    html5QrCode.start({
+                            facingMode: "environment"
+                        }, // Usar cámara trasera
+                        config,
+                        (decodedText) => {
+                            // Cuando se detecta un código QR
+                            console.log("CÓDIGO QR DETECTADO: " + decodedText);
+
+                            html5QrCode.stop().then(() => {
+                                console.log("Escáner detenido correctamente");
+
+                                // Mostrar mensaje simple en la interfaz
+                                qrResultDiv.innerHTML = `
+                                <div style="background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+                                    <p style="color: #155724; margin: 0;">Código QR escaneado con éxito!</p>
+                                    <p style="font-family: monospace; background: #f8f9fa; padding: 5px; border-radius: 3px; margin-top: 10px;">${decodedText}</p>
+                                </div>
+                            `;
+
+                                // Asignar el valor al campo oculto
+                                qrCodeInput.value = decodedText;
+
+                                // Crear un botón para enviar manualmente
+                                const btnEnviar = document.createElement("button");
+                                btnEnviar.type = "button";
+                                btnEnviar.textContent = "Iniciar sesión con este código";
+                                btnEnviar.style.backgroundColor = "#4CAF50";
+                                btnEnviar.style.color = "white";
+                                btnEnviar.style.border = "none";
+                                btnEnviar.style.padding = "10px 15px";
+                                btnEnviar.style.borderRadius = "4px";
+                                btnEnviar.style.cursor = "pointer";
+                                btnEnviar.style.marginTop = "10px";
+                                btnEnviar.style.width = "100%";
+
+                                btnEnviar.onclick = function() {
+                                    console.log("ENVIANDO FORMULARIO");
+
+                                    // Agrega un mensaje visible al usuario
+                                    qrResultDiv.innerHTML += `
+                                    <div style="background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px; padding: 10px; margin-top: 10px; margin-bottom: 15px;">
+                                        <p style="color: #856404; margin: 0;">Enviando código, por favor espera...</p>
+                                    </div>
+                                `;
+
+                                    // Enviar el formulario
+                                    const form = qrCodeInput.closest("form");
+                                    if (form) {
+                                        form.submit();
+                                    } else {
+                                        console.error("No se encontró el formulario");
+                                    }
+                                };
+
+                                qrResultDiv.appendChild(btnEnviar);
+                            }).catch((err) => {
+                                console.error("Error al detener escáner:", err);
+                                qrResultDiv.innerHTML = '<p style="color: red;">Error al detener el escáner</p>';
+                            });
+                        },
+                        (errorMessage) => {
+                            // No mostrar errores transitorios en la consola durante el escaneo normal
+                        }
+                    ).catch((err) => {
+                        console.error("ERROR AL INICIAR CÁMARA", err);
+                        qrResultDiv.innerHTML = `<p style="color: red;">Error al iniciar la cámara: ${err.message || err}</p>`;
+                    });
+                }
+            }
+
+            // Control de pestañas
             tabItems.forEach(function(item) {
                 item.addEventListener('click', function() {
                     const tabId = this.getAttribute('data-tab');
@@ -413,16 +474,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                     this.classList.add('active');
                     document.getElementById(tabId + '-tab').classList.add('active');
 
+                    // Si se selecciona la pestaña QR, iniciar el escáner
                     if (tabId === 'qr') {
                         console.log("Iniciando escáner QR con retraso...");
-                        setTimeout(function() {
-                            if (typeof initQrScanner === 'function') {
-                                console.log("Función initQrScanner encontrada, iniciando...");
-                                initQrScanner();
-                            } else {
-                                console.error("%c ERROR: Función initQrScanner no disponible", "background: red; color: white; padding: 3px;");
-                            }
-                        }, 500);
+                        setTimeout(initQrScannerLocal, 500);
                     }
                 });
             });

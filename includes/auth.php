@@ -51,9 +51,13 @@ function loginWithQr($qrCode)
     $user = $result->fetch_assoc();
     error_log("Usuario encontrado con QR: ID=" . $user['id'] . ", Email=" . $user['email']);
 
+    // Regenerar ID de sesión para prevenir session fixation
+    session_regenerate_id(true);
+
     // Iniciar sesión manualmente
     $_SESSION['usuario_id'] = $user['id'];
     $_SESSION['usuario_email'] = $user['email'];
+    $_SESSION['auth_time'] = time(); // Agregar timestamp de autenticación
 
     error_log("Sesión establecida: " . print_r($_SESSION, true));
 
@@ -62,6 +66,7 @@ function loginWithQr($qrCode)
         'message' => 'Login exitoso'
     ];
 }
+
 // Login con email y contraseña
 function loginWithEmail($email, $password)
 {
