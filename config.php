@@ -1,7 +1,7 @@
 <?php
-// config.php - Configuración global de la aplicación
+// config.php - Configuración simplificada
 
-// Iniciar sesión
+// Configuración de sesión básica (sin opciones complejas)
 session_start();
 
 // Cargar variables de entorno
@@ -11,17 +11,13 @@ if (file_exists($envFile)) {
     foreach ($lines as $line) {
         if (strpos(trim($line), '#') === 0 || strpos($line, '=') === false) continue;
         list($key, $value) = explode('=', $line, 2);
-        $key = trim($key);
-        $value = trim($value);
-        if (strpos($value, '"') === 0 && strrpos($value, '"') === strlen($value) - 1) {
-            $value = substr($value, 1, -1);
-        }
-        $_ENV[$key] = $value;
+        $_ENV[trim($key)] = trim(trim($value), '"');
     }
 }
 
 // Función para obtener variables de entorno
-function env($key, $default = null) {
+function env($key, $default = null)
+{
     return isset($_ENV[$key]) ? $_ENV[$key] : $default;
 }
 

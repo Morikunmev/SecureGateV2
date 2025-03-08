@@ -1,13 +1,26 @@
 <?php
-// pages/dashboard.php - Panel de control
+// Al inicio de dashboard.php
 require_once __DIR__ . '/../config.php';
 
-// Verificar si el usuario está autenticado
+// Verifica si hay una sesión activa
 if (!isset($_SESSION['usuario_id'])) {
-    redirect('pages/login.php');
+    // Mostrar información detallada
+    echo '<div style="max-width: 800px; margin: 50px auto; padding: 20px; background-color: #f8d7da; border-radius: 5px; text-align: center;">';
+    echo '<h1 style="color: #721c24;">Error de autenticación</h1>';
+    echo '<p>No se ha detectado una sesión activa.</p>';
+    echo '<div style="background-color: #f8f9fa; padding: 15px; margin: 15px 0; border-radius: 4px; text-align: left;">';
+    echo '<p><strong>SESSION:</strong></p>';
+    echo '<pre>' . print_r($_SESSION, true) . '</pre>';
+    echo '</div>';
+    echo '<a href="' . BASE_URL . '/pages/login.php" style="display: inline-block; padding: 10px 20px; background-color: #dc3545; color: white; text-decoration: none; border-radius: 4px; margin-top: 15px;">Volver al login</a>';
+    echo '</div>';
+    exit;
 }
 
-// Obtener información del usuario
+error_log("Sesión activa para usuario ID: " . $_SESSION['usuario_id']);
+
+
+// El resto del código del dashboard
 $usuario_id = $_SESSION['usuario_id'];
 $usuario_email = $_SESSION['usuario_email'];
 

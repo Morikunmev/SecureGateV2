@@ -1,7 +1,58 @@
 <?php
 // pages/login.php - Página de inicio de sesión
 
+// Depuración en la página - Oculta por defecto, puedes mostrarla cambiando display:none por display:block
+echo '<div id="debug-log" style="position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); color: white; font-family: monospace; padding: 10px; max-height: 200px; overflow-y: auto; z-index: 9999; font-size: 12px; display: none;"></div>';
+echo '<script>
+(function() {
+    const oldLog = console.log;
+    const oldError = console.error;
+    const debugDiv = document.getElementById("debug-log");
+    
+    function addMessage(msg, type) {
+        if (debugDiv) {
+            const line = document.createElement("div");
+            line.style.color = type === "error" ? "#ff6b6b" : "#6bff6b";
+            line.textContent = new Date().toLocaleTimeString() + ": " + msg;
+            debugDiv.appendChild(line);
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+    }
+    
+    console.log = function(...args) {
+        oldLog.apply(console, args);
+        addMessage(args.map(arg => typeof arg === "object" ? JSON.stringify(arg) : arg).join(" "), "log");
+    };
+    
+    console.error = function(...args) {
+        oldError.apply(console, args);
+        addMessage(args.map(arg => typeof arg === "object" ? JSON.stringify(arg) : arg).join(" "), "error");
+    };
+})();
+</script>';
+
 require_once __DIR__ . '/../config.php';
+
+// Manejar login directo de depuración
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['debug_login'])) {
+    // Establecer una sesión directamente para pruebas
+    $_SESSION['usuario_id'] = 47; // Asegúrate de usar el ID correcto del usuario en tu base de datos
+    $_SESSION['usuario_email'] = 'ricky201325@gmail.com'; // Actualizar con el email correcto
+
+    echo '<div style="background-color: #d4edda; padding: 15px; margin: 15px 0; text-align: center; border-radius: 4px;">
+        <h3 style="color: #155724; margin-top: 0;">Sesión establecida manualmente para depuración</h3>
+        <p>Usuario ID: ' . $_SESSION['usuario_id'] . '</p>
+        <p>Email: ' . $_SESSION['usuario_email'] . '</p>
+        <p>Redirigiendo al dashboard en 3 segundos...</p>
+    </div>';
+
+    echo '<script>
+        setTimeout(function() {
+            window.location.href = "' . BASE_URL . '/pages/dashboard.php";
+        }, 3000);
+    </script>';
+    exit();
+}
 
 // Verificar si ya está autenticado
 if (isset($_SESSION['usuario_id'])) {
@@ -38,17 +89,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_email'])) {
 }
 
 // Procesar formulario de login con QR
+// Procesar formulario de login con QR
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
-    $codigo_qr = $_POST['codigo_qr'] ?? '';
+    $codigo_qr = $_POST['codigo_qr'] ?? ($_POST['codigo_qr_manual'] ?? '');
 
-    $result = loginWithQr($codigo_qr);
+    error_log("Intentando login con QR: " . $codigo_qr);
 
-    if ($result['success']) {
-        redirect('pages/dashboard.php');
+    if (empty($codigo_qr)) {
+        $message = "Por favor ingresa o escanea un código QR";
+        $messageType = "error";
     } else {
-        $message = $result['message'];
+        // Consulta directa a la base de datos
+        $conn = getDb();
+        $stmt = $conn->prepare("SELECT * FROM usuarios WHERE codigo_qr = ?");
+        $stmt->bind_param("s", $codigo_qr);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows === 0) {
+            error_log("No se encontró usuario con QR: " . $codigo_qr);
+            $message = "Código QR no válido o no registrado.";
+            $messageType = "error";
+        } else {
+            $user = $result->fetch_assoc();
+
+            if ($user['status'] !== 'active') {
+                $message = "Tu cuenta no está activa. Por favor, verifica tu correo electrónico.";
+                $messageType = "error";
+                error_log("Usuario con estado no activo: " . $user['status']);
+            } else {
+                // Usuario encontrado y activo
+                error_log("Usuario encontrado y activo: ID=" . $user['id']);
+
+                // Establecer la sesión manualmente
+                $_SESSION['usuario_id'] = $user['id'];
+                $_SESSION['usuario_email'] = $user['email'];
+
+                error_log("Sesión establecida: " . print_r($_SESSION, true));
+
+                // Mostrar información de depuración
+                echo '<div style="background-color: #d4edda; color: #155724; padding: 15px; margin: 15px 0; border-radius: 4px; text-align: center;">
+                    <h3 style="margin-top:0;">Login exitoso</h3>
+                    <p><strong>Usuario ID:</strong> ' . $_SESSION['usuario_id'] . '</p>
+                    <p><strong>Email:</strong> ' . $_SESSION['usuario_email'] . '</p>
+                    <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px; text-align: left;">
+                        <p><strong>Información de sesión:</strong></p>
+                        <pre>' . print_r($_SESSION, true) . '</pre>
+                    </div>
+                    <p style="margin-top: 15px;">Haz clic en el botón para ir al dashboard:</p>
+                    <a href="' . BASE_URL . '/pages/dashboard.php" style="display: inline-block; margin-top: 10px; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">IR AL DASHBOARD</a>
+                    <p style="margin-top: 15px; font-size: 12px; color: #666;">Si no eres redirigido automáticamente, haz clic en el botón anterior.</p>
+                </div>';
+
+                // Redirección directa al dashboard con JavaScript, después de un retraso
+                echo '<script>
+                    console.log("Preparando redirección al dashboard...");
+                    setTimeout(function() {
+                        console.log("Redirigiendo ahora a: ' . BASE_URL . '/pages/dashboard.php");
+                        window.location.href = "' . BASE_URL . '/pages/dashboard.php";
+                    }, 5000); // 5 segundos de retraso
+                </script>';
+                exit();
+            }
+        }
     }
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -59,7 +165,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
     <title>Iniciar Sesión - <?= APP_NAME ?></title>
     <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/styles.css">
     <style>
-        /* Estilos simplificados */
         body {
             font-family: Arial, sans-serif;
             background-color: #f7f7f7;
@@ -104,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
         .tab-item {
             flex: 1;
             text-align: center;
-            padding:  10px;
+            padding: 10px;
             cursor: pointer;
         }
 
@@ -132,12 +237,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
         }
 
         input[type="email"],
-        input[type="password"] {
+        input[type="password"],
+        input[type="text"] {
             width: 100%;
             padding: 10px;
             box-sizing: border-box;
             border: 1px solid #ddd;
             border-radius: 4px;
+            font-size: 16px;
         }
 
         button {
@@ -148,6 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 16px;
         }
 
         .alert {
@@ -179,6 +287,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
         .register-link {
             text-align: center;
             margin-top: 15px;
+        }
+
+        .form-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -226,8 +340,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                                 <input type="hidden" id="codigo_qr" name="codigo_qr">
                             </div>
 
+                            <!-- Alternativa para ingresar código manualmente -->
+                            <div class="form-group" style="margin-top: 20px;">
+                                <label>O ingresa el código manualmente:</label>
+                                <input type="text" name="codigo_qr_manual" placeholder="Ingresa el código QR aquí">
+                                <p class="form-hint">Usa esta opción si el escáner de la cámara no funciona.</p>
+                            </div>
+
                             <button type="submit" name="login_qr">Verificar Código QR</button>
                         </form>
+
+                        <!-- Opción de depuración directa -->
+                        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                            <details>
+                                <summary style="cursor: pointer; color: #666;">Opciones avanzadas</summary>
+                                <div style="margin-top: 10px;">
+                                    <form method="post" action="">
+                                        <input type="hidden" name="debug_login" value="1">
+                                        <button type="submit" style="background-color: #6c757d; margin-top: 10px;">Login directo (debug)</button>
+                                    </form>
+                                </div>
+                            </details>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -242,14 +376,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="<?= BASE_URL ?>/assets/js/qr-scanner.js"></script>
     <script>
+        // Asegurar que los logs son visibles
+        console.clear();
+        console.log("%c PÁGINA DE LOGIN CARGADA", "background: #4CAF50; color: white; padding: 5px; font-size: 16px;");
+
         // Script para manejo de pestañas
         document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM completamente cargado");
+
             const tabItems = document.querySelectorAll('.tab-item');
             const tabPanes = document.querySelectorAll('.tab-pane');
+
+            // Si hay un error en la consola, esto se mostrará
+            window.onerror = function(message, source, lineno, colno, error) {
+                console.error("%c ERROR JAVASCRIPT DETECTADO", "background: red; color: white; padding: 5px;");
+                console.error("Mensaje:", message);
+                console.error("Archivo:", source);
+                console.error("Línea:", lineno);
+                console.error("Error completo:", error);
+                return false;
+            };
 
             tabItems.forEach(function(item) {
                 item.addEventListener('click', function() {
                     const tabId = this.getAttribute('data-tab');
+                    console.log("Tab seleccionada:", tabId);
 
                     tabItems.forEach(function(tab) {
                         tab.classList.remove('active');
@@ -263,54 +414,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login_qr'])) {
                     document.getElementById(tabId + '-tab').classList.add('active');
 
                     if (tabId === 'qr') {
-                        // Iniciar el escáner QR si está visible
-                        setTimeout(initQrScanner, 300);
+                        console.log("Iniciando escáner QR con retraso...");
+                        setTimeout(function() {
+                            if (typeof initQrScanner === 'function') {
+                                console.log("Función initQrScanner encontrada, iniciando...");
+                                initQrScanner();
+                            } else {
+                                console.error("%c ERROR: Función initQrScanner no disponible", "background: red; color: white; padding: 3px;");
+                            }
+                        }, 500);
                     }
                 });
             });
-
-            // Función para iniciar escáner QR
-            function initQrScanner() {
-                const qrReaderDiv = document.getElementById('qr-reader');
-                const qrResultDiv = document.getElementById('qr-result');
-                const qrCodeInput = document.getElementById('codigo_qr');
-
-                if (!qrReaderDiv || !qrResultDiv || !qrCodeInput) {
-                    return;
-                }
-
-                if (typeof Html5Qrcode === 'undefined') {
-                    qrResultDiv.innerHTML = '<p style="color: red;">Error: Librería de escaneo QR no disponible.</p>';
-                    return;
-                }
-
-                const html5QrCode = new Html5Qrcode("qr-reader");
-                const config = {
-                    fps: 10,
-                    qrbox: {
-                        width: 250,
-                        height: 250
-                    }
-                };
-
-                html5QrCode.start({
-                        facingMode: "environment"
-                    },
-                    config,
-                    (decodedText) => {
-                        html5QrCode.stop().then(() => {
-                            qrResultDiv.innerHTML = '<p style="color: green;">Código QR escaneado con éxito!</p>';
-                            qrCodeInput.value = decodedText;
-
-                            setTimeout(() => {
-                                document.querySelector('#qr-form').submit();
-                            }, 1500);
-                        });
-                    },
-                ).catch(err => {
-                    qrResultDiv.innerHTML = `<p style="color: red;">Error al iniciar la cámara: ${err}</p>`;
-                });
-            }
         });
     </script>
 </body>

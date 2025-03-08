@@ -1,20 +1,19 @@
 <?php
-require_once __DIR__ . '/../vendor/autoload.php';
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-use PHPMailer\PHPMailer\SMTP;
-//includes/helpers.php - Funciones auxiliares simplificadas
-//FUNCION PARA GENERAR EL CODIGO QR UNICO
+// includes/helpers.php - Funciones auxiliares simplificadas
+
+// Generar código QR único
 function generateQrCode()
 {
-    return bin2hex(random_bytes(16)); //32 caracteres hexadecimanes
+    return bin2hex(random_bytes(16)); // 32 caracteres hexadecimales
 }
-//GENERAR TOKEN PARA VERIFICACION
+
+// Generar token para verificación
 function generateToken($data)
 {
-    return hash('sha256', $data . time());
-};
-//PARA Redireccionar a otra página
+    return hash('sha256', $data . time()); // SHA-256 hash
+}
+
+// Redireccionar a otra página
 function redirect($url)
 {
     if (!preg_match('~^(?:f|ht)tps?://~i', $url)) {
@@ -30,7 +29,7 @@ function displayQrCode($qrCode, $userId = null, $purpose = 'registration')
     $containerId = 'qrcode_' . md5($qrCode);
 
     if ($purpose === 'registration' && $userId) {
-        // Asegurarte de usar URL absoluta
+        // Usar URL completa para el QR
         $qrValue = env('APP_URL') . '/pages/verify.php?id=' . $userId . '&code=' . urlencode($qrCode);
     } else {
         $qrValue = $qrCode;
@@ -57,29 +56,31 @@ function displayQrCode($qrCode, $userId = null, $purpose = 'registration')
             </div>';
 }
 
-// Enviar email de verificación
-function sendVerificationEmail($email, $userId, $token) {
-    // Importar las clases necesarias
-    
-    // Configuración de la aplicación
+// Enviar email de verificació
+function sendVerificationEmail($email, $userId, $token)
+{
+    require_once __DIR__ . '/../vendor/autoload.php';
+
     $appUrl = env('APP_URL');
     $appName = env('APP_NAME');
-    
+
+    // Crear enlace de verificación
+    $verificationLink = $appUrl . '/pages/verify.php?id=' . $userId . '&token=' . $token;
+
     try {
-        // Crear una nueva instancia de PHPMailer
-        $mail = new PHPMailer(true);
-        
-        //Configuración del servidor
-        $mail->isSMTP();                                      // Usar SMTP
-        $mail->Host       = env('MAIL_HOST');                 // Servidor SMTP
-        $mail->SMTPAuth   = true;                             // Habilitar autenticación SMTP
-        $mail->Username   = env('MAIL_USERNAME');             // Usuario SMTP
-        $mail->Password   = env('MAIL_PASSWORD');             // Contraseña SMTP
-        $mail->SMTPSecure = env('MAIL_ENCRYPTION');           // Habilitar encriptación TLS o SSL
-        $mail->Port       = env('MAIL_PORT');                 // Puerto TCP
-        
-        // Para desarrollo, puedes desactivar la verificación de certificados SSL 
-        // (no recomendado para producción)
+        // Crear instancia de PHPMailer
+        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+
+        // Configuración del servidor
+        $mail->isSMTP();
+        $mail->Host = env('MAIL_HOST');
+        $mail->SMTPAuth = true;
+        $mail->Username = env('MAIL_USERNAME');
+        $mail->Password = env('MAIL_PASSWORD');
+        $mail->SMTPSecure = env('MAIL_ENCRYPTION');
+        $mail->Port = env('MAIL_PORT');
+
+        // Para desarrollo, desactivar verificación de certificado SSL si es necesario
         $mail->SMTPOptions = [
             'ssl' => [
                 'verify_peer' => false,
@@ -87,16 +88,14 @@ function sendVerificationEmail($email, $userId, $token) {
                 'allow_self_signed' => true
             ]
         ];
-        
-        //Destinatarios
+
+        // Remitente y destinatario
         $mail->setFrom(env('MAIL_FROM'), $appName);
-        $mail->addAddress($email);                     // Añadir destinatario
-        
-        // Contenido
-        $mail->isHTML(true);                                  // Email en formato HTML
+        $mail->addAddress($email);
+
+        // Contenido del correo
+        $mail->isHTML(true);
         $mail->Subject = "Verifica tu código QR - " . $appName;
-        
-        // Cuerpo del mensaje
         $mail->Body = "
         <html>
         <head>
@@ -119,7 +118,7 @@ function sendVerificationEmail($email, $userId, $token) {
                     <p>Gracias por registrarte en {$appName}.</p>
                     <p>Para activar tu código QR y completar el registro, haz clic en el siguiente botón:</p>
                     <p style='text-align: center;'>
-                        <a href='{$appUrl}/pages/verify.php?id={$userId}&token={$token}' class='button'>Verificar mi código QR</a>
+                        <a href='{$verificationLink}' class='button'>Verificar mi código QR</a>
                     </p>
                     <p>Si no has solicitado este registro, puedes ignorar este mensaje.</p>
                 </div>
@@ -127,14 +126,22 @@ function sendVerificationEmail($email, $userId, $token) {
         </body>
         </html>
         ";
-        
-        // Versión alternativa en texto plano
-        $mail->AltBody = "Gracias por registrarte en {$appName}. Para verificar tu cuenta, visita el siguiente enlace: {$appUrl}/pages/verify.php?id={$userId}&token={$token}";
-        
+
+        // Enviar el correo
         $mail->send();
+        error_log("Correo de verificación enviado a: $email");
         return true;
     } catch (Exception $e) {
-        error_log("Error al enviar email: {$mail->ErrorInfo}");
+        error_log("Error al enviar correo: " . $e->getMessage());
+
+        // Mostrar enlace de verificación directamente en la página como respaldo
+        echo '<div style="background-color: #f8d7da; color: #721c24; padding: 15px; margin: 15px 0; border-radius: 4px; border: 1px solid #f5c6cb;">
+            <h3>Error al enviar correo</h3>
+            <p>No se pudo enviar el correo de verificación debido a un error: ' . $e->getMessage() . '</p>
+            <p>Para continuar con el proceso, utiliza el siguiente enlace:</p>
+            <p><a href="' . $verificationLink . '" style="display: inline-block; padding: 10px 15px; background-color: #721c24; color: white; text-decoration: none; border-radius: 4px;">Verificar mi cuenta</a></p>
+        </div>';
+
         return false;
     }
 }

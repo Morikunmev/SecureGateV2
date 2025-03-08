@@ -4,41 +4,64 @@
 // Login con código QR
 function loginWithQr($qrCode)
 {
+    // Verificación básica
     if (empty($qrCode)) {
+        error_log("Error: Código QR vacío");
         return [
             'success' => false,
             'message' => 'No se ha detectado ningún código QR.'
         ];
     }
 
-    // Buscar usuario con el QR
-    $user = findUserByQrCode($qrCode);
+    error_log("Intentando login con QR: " . $qrCode);
 
-    if (!$user) {
+    // Consulta directa a la base de datos
+    $conn = getDb();
+    $stmt = $conn->prepare("SELECT * FROM usuarios WHERE codigo_qr = ?");
+    $stmt->bind_param("s", $qrCode);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    // Verificar si se encontró el usuario
+    if ($result->num_rows === 0) {
+        error_log("No se encontró usuario con QR: " . $qrCode);
+
+        // Verificar si existe pero está inactivo
+        $stmt2 = $conn->prepare("SELECT * FROM usuarios WHERE codigo_qr = ? AND status != 'active'");
+        $stmt2->bind_param("s", $qrCode);
+        $stmt2->execute();
+        $result2 = $stmt2->get_result();
+
+        if ($result2->num_rows > 0) {
+            $inactive_user = $result2->fetch_assoc();
+            error_log("Se encontró usuario inactivo con QR: " . $qrCode . ", estado: " . $inactive_user['status']);
+            return [
+                'success' => false,
+                'message' => 'Tu cuenta no está activa. Por favor, verifica tu correo electrónico.'
+            ];
+        }
+
         return [
             'success' => false,
             'message' => 'Código QR no válido o no registrado.'
         ];
     }
 
-    // Validar estado del usuario
-    if ($user['status'] !== 'active') {
-        return [
-            'success' => false,
-            'message' => 'Tu cuenta no está activa. Por favor, verifica tu correo electrónico.'
-        ];
-    }
+    // Usuario encontrado
+    $user = $result->fetch_assoc();
+    error_log("Usuario encontrado con QR: ID=" . $user['id'] . ", Email=" . $user['email']);
 
-    // Iniciar sesión
+    // Iniciar sesión manualmente
     $_SESSION['usuario_id'] = $user['id'];
     $_SESSION['usuario_email'] = $user['email'];
+
+    error_log("Sesión establecida: " . print_r($_SESSION, true));
 
     return [
         'success' => true,
         'message' => 'Login exitoso'
     ];
 }
-
 // Login con email y contraseña
 function loginWithEmail($email, $password)
 {
@@ -75,9 +98,13 @@ function loginWithEmail($email, $password)
         ];
     }
 
+    // Regenerar ID de sesión para prevenir session fixation
+    session_regenerate_id(true);
+
     // Iniciar sesión
     $_SESSION['usuario_id'] = $user['id'];
     $_SESSION['usuario_email'] = $user['email'];
+    $_SESSION['auth_time'] = time(); // Agregar timestamp de autenticación
 
     return [
         'success' => true,
