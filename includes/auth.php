@@ -119,8 +119,8 @@ function loginWithEmail($email, $password)
 
 // Registrar nuevo usuario
 function registerUser($email, $password, $passwordConfirm)
-{
-    // Validación básica
+{   
+// region Validación básica
     if (empty($email) || empty($password) || empty($passwordConfirm)) {
         return [
             'success' => false,
@@ -156,7 +156,6 @@ function registerUser($email, $password, $passwordConfirm)
             'message' => 'Este email ya está registrado.'
         ];
     }
-
     // Crear usuario pendiente
     $userId = createPendingUser($email, $password);
 
