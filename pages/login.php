@@ -370,6 +370,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' || isset($_POST['login_qr'])) {
                     }
 
                     // Verificar que la biblioteca se ha cargado
+                    //Esta biblioteca se carga desde https://unpkg.com/html5-qrcode
                     if (typeof Html5Qrcode === 'undefined') {
                         console.error("ERROR: Librería QR no disponible");
                         qrResultDiv.innerHTML = '<p style="color: red;">Error: Librería de escaneo QR no disponible.</p>';

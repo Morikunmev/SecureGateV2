@@ -165,6 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h2>Tu código QR temporal</h2>
                     <p>Este es tu código QR <strong>temporal</strong>. Por favor, escanéalo con tu celular para verificar tu correo electrónico.</p>
 
+                    <!-- Aca se genera el qr-->
                     <?= displayQrCode($qrCode, $userId) ?>
 
                     <div class="info-box">

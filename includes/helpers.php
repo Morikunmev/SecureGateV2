@@ -5,6 +5,7 @@
 function generateQrCode()
 {
     return bin2hex(random_bytes(16)); // 32 caracteres hexadecimales
+    //podria generar una saldida como esta: 7d8f3e9a1c5b2d6f8a4e7c9b3d5f2a1c
 }
 
 // Generar token para verificación
@@ -30,6 +31,7 @@ function displayQrCode($qrCode, $userId = null, $purpose = 'registration')
 
     if ($purpose === 'registration' && $userId) {
         // Usar URL completa para el QR
+        //urlencode se usa para no romper la estructura del $qrcode
         $qrValue = env('APP_URL') . '/pages/verify.php?id=' . $userId . '&code=' . urlencode($qrCode);
     } else {
         $qrValue = $qrCode;
